@@ -1,16 +1,19 @@
 """
-Vector store management using ChromaDB.
+Vector store management using FAISS.
 Handles document embedding, storage, and similarity search
 with persistent local storage.
 """
 
+import json
 import logging
+import os
+import shutil
 from typing import List, Optional, Dict, Any
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+import faiss
+import numpy as np
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
 from utils.config import Config
@@ -20,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class VectorStoreManager:
     """
-    Manages the ChromaDB vector store for document embeddings.
+    Manages the FAISS vector store for document embeddings.
 
     Uses HuggingFace sentence-transformers for local embedding
     generation (no API keys required). Persists data to disk
@@ -30,7 +33,6 @@ class VectorStoreManager:
     def __init__(self):
         self._embeddings = None
         self._vector_store = None
-        self._client = None
 
     @property
     def embeddings(self) -> HuggingFaceEmbeddings:
@@ -46,25 +48,27 @@ class VectorStoreManager:
         return self._embeddings
 
     @property
-    def client(self) -> chromadb.ClientAPI:
-        """Lazy-load the ChromaDB persistent client."""
-        if self._client is None:
-            self._client = chromadb.PersistentClient(
-                path=Config.CHROMA_PERSIST_DIR,
-                settings=ChromaSettings(anonymized_telemetry=False),
-            )
-        return self._client
-
-    @property
-    def vector_store(self) -> Chroma:
-        """Lazy-load the LangChain Chroma wrapper."""
+    def vector_store(self) -> FAISS:
+        """Lazy-load the FAISS vector store from disk, or return cached instance."""
         if self._vector_store is None:
-            self._vector_store = Chroma(
-                client=self.client,
-                collection_name=Config.COLLECTION_NAME,
-                embedding_function=self.embeddings,
-            )
+            index_path = Config.FAISS_INDEX_DIR
+            if os.path.exists(os.path.join(index_path, "index.faiss")):
+                logger.info("Loading existing FAISS index from disk")
+                self._vector_store = FAISS.load_local(
+                    index_path,
+                    self.embeddings,
+                    allow_dangerous_deserialization=True,
+                )
+            else:
+                logger.info("No existing FAISS index found; will create on first add")
         return self._vector_store
+
+    def _save_index(self) -> None:
+        """Persist the FAISS index to disk."""
+        if self._vector_store is not None:
+            os.makedirs(Config.FAISS_INDEX_DIR, exist_ok=True)
+            self._vector_store.save_local(Config.FAISS_INDEX_DIR)
+            logger.debug("FAISS index saved to disk")
 
     def add_documents(self, documents: List[Document]) -> int:
         """
@@ -80,7 +84,14 @@ class VectorStoreManager:
             return 0
 
         logger.info(f"Embedding {len(documents)} document chunks...")
-        self.vector_store.add_documents(documents)
+
+        if self._vector_store is None and self.vector_store is None:
+            # No existing index — create a new one from the documents
+            self._vector_store = FAISS.from_documents(documents, self.embeddings)
+        else:
+            self._vector_store.add_documents(documents)
+
+        self._save_index()
         logger.info(f"Added {len(documents)} chunks to vector store")
         return len(documents)
 
@@ -101,6 +112,9 @@ class VectorStoreManager:
         Returns:
             List of most relevant Document objects.
         """
+        if self.vector_store is None:
+            return []
+
         kwargs = {"k": k}
         if filter_dict:
             kwargs["filter"] = filter_dict
@@ -124,6 +138,9 @@ class VectorStoreManager:
         Returns:
             List of (Document, score) tuples, sorted by relevance.
         """
+        if self.vector_store is None:
+            return []
+
         results = self.vector_store.similarity_search_with_relevance_scores(
             query, k=k
         )
@@ -137,18 +154,18 @@ class VectorStoreManager:
             Dictionary with collection metadata and counts.
         """
         try:
-            collection = self.client.get_collection(Config.COLLECTION_NAME)
-            count = collection.count()
+            if self.vector_store is None:
+                return {"total_chunks": 0, "unique_sources": 0, "source_names": []}
 
-            # Extract unique sources
-            if count > 0:
-                all_metadata = collection.get(include=["metadatas"])
-                sources = set()
-                for meta in all_metadata.get("metadatas", []):
-                    if meta and "source" in meta:
-                        sources.add(meta["source"])
-            else:
-                sources = set()
+            docstore = self._vector_store.docstore
+            index_to_id = self._vector_store.index_to_docstore_id
+            count = len(index_to_id)
+
+            sources = set()
+            for doc_id in index_to_id.values():
+                doc = docstore.search(doc_id)
+                if hasattr(doc, "metadata") and "source" in doc.metadata:
+                    sources.add(doc.metadata["source"])
 
             return {
                 "total_chunks": count,
@@ -161,7 +178,9 @@ class VectorStoreManager:
     def clear_collection(self) -> None:
         """Delete all documents from the vector store."""
         try:
-            self.client.delete_collection(Config.COLLECTION_NAME)
+            index_path = Config.FAISS_INDEX_DIR
+            if os.path.exists(index_path):
+                shutil.rmtree(index_path)
             self._vector_store = None
             logger.info("Vector store cleared")
         except Exception as e:
@@ -178,15 +197,27 @@ class VectorStoreManager:
             Number of chunks removed.
         """
         try:
-            collection = self.client.get_collection(Config.COLLECTION_NAME)
-            results = collection.get(
-                where={"source": source_name},
-                include=["metadatas"],
-            )
-            ids_to_delete = results.get("ids", [])
+            if self.vector_store is None:
+                return 0
+
+            docstore = self._vector_store.docstore
+            index_to_id = self._vector_store.index_to_docstore_id
+
+            # Find all document IDs matching this source
+            ids_to_delete = []
+            for doc_id in index_to_id.values():
+                doc = docstore.search(doc_id)
+                if (
+                    hasattr(doc, "metadata")
+                    and doc.metadata.get("source") == source_name
+                ):
+                    ids_to_delete.append(doc_id)
+
             if ids_to_delete:
-                collection.delete(ids=ids_to_delete)
+                self._vector_store.delete(ids_to_delete)
+                self._save_index()
                 logger.info(f"Deleted {len(ids_to_delete)} chunks from '{source_name}'")
+
             return len(ids_to_delete)
         except Exception as e:
             logger.error(f"Failed to delete source '{source_name}': {e}")

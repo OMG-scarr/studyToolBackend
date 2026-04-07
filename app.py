@@ -4,7 +4,7 @@ Main Streamlit application.
 
 A RAG-based learning platform that lets students upload study materials
 (PDFs, DOCX, TXT, Markdown, CSV) and query them using natural language.
-Powered by LangChain, ChromaDB, and local sentence-transformer embeddings.
+Powered by LangChain, FAISS, and local sentence-transformer embeddings.
 """
 
 import os

@@ -11,14 +11,14 @@ A RAG-based learning platform that lets students upload study materials and quer
 
 Students deal with scattered knowledge across PDFs, lecture notes, textbooks, and documentation. StudyTool consolidates everything into a single searchable knowledge base. Upload your materials, ask questions in plain English, and get sourced answers pulled directly from your documents.
 
-No API keys required. All processing runs locally using sentence-transformer embeddings and ChromaDB vector storage.
+No API keys required. All processing runs locally using sentence-transformer embeddings and FAISS vector storage.
 
 ## Features
 
 - **Multi-Format Document Ingestion**: Upload PDFs, Word documents, plain text, Markdown, and CSV files
 - **Semantic Search**: Vector-based retrieval using sentence-transformers (not keyword matching)
 - **Source Attribution**: Every answer cites exactly which document and page the information came from
-- **Persistent Knowledge Base**: ChromaDB stores embeddings on disk across sessions
+- **Persistent Knowledge Base**: FAISS stores embeddings on disk across sessions
 - **Document Management**: Add, remove, and track individual documents in your collection
 - **Chat Interface**: Conversational UI with full message history
 - **Zero API Dependency**: Runs entirely on local models with no external service calls
@@ -38,7 +38,7 @@ User Question
 ┌──────────────────────────────────────────────────┐
 │               RAG Engine                          │
 │  1. Embed query (sentence-transformers)          │
-│  2. Similarity search (ChromaDB)                 │
+│  2. Similarity search (FAISS)                    │
 │  3. Retrieve top-k relevant chunks               │
 │  4. Synthesize sourced answer                    │
 └──────────────────┬───────────────────────────────┘
@@ -46,7 +46,7 @@ User Question
           ┌────────┴────────┐
           v                 v
 ┌─────────────────┐  ┌──────────────────┐
-│  Document       │  │  ChromaDB        │
+│  Document       │  │  FAISS           │
 │  Processor      │  │  Vector Store    │
 │                 │  │                  │
 │  PDF, DOCX,    │  │  Embeddings +    │
@@ -94,7 +94,7 @@ Opens at `http://localhost:8501`. Upload documents via the sidebar and start ask
 | Frontend | Streamlit | Chat interface and document management |
 | RAG Pipeline | LangChain | Document loading, splitting, retrieval chain |
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Local vector embedding generation |
-| Vector Store | ChromaDB | Persistent similarity search database |
+| Vector Store | FAISS | Persistent similarity search database |
 | Document Parsing | PyPDF, python-docx, Unstructured | Multi-format file processing |
 
 ## Project Structure
@@ -106,7 +106,7 @@ studyToolBackend/
 │   ├── __init__.py
 │   ├── config.py               # Environment configuration
 │   ├── document_processor.py   # File loading and chunking pipeline
-│   ├── vector_store.py         # ChromaDB management and search
+│   ├── vector_store.py         # FAISS management and search
 │   └── rag_engine.py           # Query processing and answer synthesis
 ├── .streamlit/
 │   └── config.toml             # UI theme configuration
@@ -122,7 +122,7 @@ All settings are configurable via environment variables (see `.env.example`):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | HuggingFace model for embeddings |
-| `CHROMA_PERSIST_DIR` | `./chroma_db` | ChromaDB storage location |
+| `FAISS_INDEX_DIR` | `./faiss_index` | FAISS index storage location |
 | `CHUNK_SIZE` | `1000` | Characters per document chunk |
 | `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks |
 | `MAX_UPLOAD_SIZE_MB` | `50` | Maximum file upload size |
