@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(c:/Users/mutho/Documents/Github/studyToolBackend/venv/Scripts/python.exe -m streamlit run c:/Users/mutho/Documents/Github/studyToolBackend/app.py)"
+    ]
+  }
+}
