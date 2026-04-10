@@ -1,139 +1,165 @@
 # StudyTool - AI-Powered Study Assistant
 
-A RAG-based learning platform that lets students upload study materials and query them using natural language. Think NotebookLM, but open-source and running entirely on your machine.
+A NotebookLM-style learning platform that lets students organize study materials into notebooks, chat with their documents, and generate study aids. Runs entirely on your machine using DeepSeek-R1 via Ollama.
 
-![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square)
-![LangChain](https://img.shields.io/badge/LangChain-0.2+-1C3C3C?style=flat-square)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-FF4B4B?style=flat-square)
+![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat-square)
+![Ollama](https://img.shields.io/badge/Ollama-DeepSeek--R1-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
 
-## Overview
+No cloud APIs. No API keys. Everything runs locally.
 
-Students deal with scattered knowledge across PDFs, lecture notes, textbooks, and documentation. StudyTool consolidates everything into a single searchable knowledge base. Upload your materials, ask questions in plain English, and get sourced answers pulled directly from your documents.
+## Features (v2)
 
-No API keys required. All processing runs locally using sentence-transformer embeddings and FAISS vector storage.
-
-## Features
-
-- **Multi-Format Document Ingestion**: Upload PDFs, Word documents, plain text, Markdown, and CSV files
-- **Semantic Search**: Vector-based retrieval using sentence-transformers (not keyword matching)
-- **Source Attribution**: Every answer cites exactly which document and page the information came from
-- **Persistent Knowledge Base**: FAISS stores embeddings on disk across sessions
-- **Document Management**: Add, remove, and track individual documents in your collection
-- **Chat Interface**: Conversational UI with full message history
-- **Zero API Dependency**: Runs entirely on local models with no external service calls
-
-## Architecture
-
-```
-User Question
-    |
-    v
-┌──────────────────────────────────────────────────┐
-│              Streamlit Frontend                    │
-│         (Chat UI + Document Management)           │
-└──────────────────┬───────────────────────────────┘
-                   |
-                   v
-┌──────────────────────────────────────────────────┐
-│               RAG Engine                          │
-│  1. Embed query (sentence-transformers)          │
-│  2. Similarity search (FAISS)                    │
-│  3. Retrieve top-k relevant chunks               │
-│  4. Synthesize sourced answer                    │
-└──────────────────┬───────────────────────────────┘
-                   |
-          ┌────────┴────────┐
-          v                 v
-┌─────────────────┐  ┌──────────────────┐
-│  Document       │  │  FAISS           │
-│  Processor      │  │  Vector Store    │
-│                 │  │                  │
-│  PDF, DOCX,    │  │  Embeddings +    │
-│  TXT, MD, CSV  │  │  Metadata        │
-│  -> Chunks      │  │  (persistent)    │
-└─────────────────┘  └──────────────────┘
-```
+- **Multi-Notebook Organization**: Group sources into separate notebooks
+- **Multi-Format Upload**: PDF, Word, plain text, Markdown, CSV
+- **RAG Chat with Streaming**: SSE token-by-token streaming with source citations
+- **Persistent Chat History**: Conversations saved per notebook
+- **Content Generation**:
+  - Summaries
+  - Study Guides
+  - Flashcards
+  - FAQs
+  - Timelines
+  - Audio Overview scripts (podcast-style, two hosts)
+  - Custom prompts
+- **SQLite Persistence**: Notebooks, sources, chat history, generated content
+- **Semantic Search**: Per-notebook vector store with cosine similarity
+- **Zero Cloud Dependency**: Runs entirely on local models via Ollama
 
 ## Quick Start
 
 ### Prerequisites
-- Python 3.9 or higher
-- pip
 
-### Installation
+- [Go 1.23+](https://go.dev/dl/)
+- [Ollama](https://ollama.com)
 
-```bash
-git clone https://github.com/OMG-scarr/studyToolBackend.git
-cd studyToolBackend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment config
-cp .env.example .env
-```
-
-### Run
+### 1. Pull the models
 
 ```bash
-streamlit run app.py
+ollama pull deepseek-r1:1.5b
+ollama pull all-minilm
 ```
 
-Opens at `http://localhost:8501`. Upload documents via the sidebar and start asking questions.
+### 2. Build and run
 
-## Tech Stack
+```bash
+cd v2
+go build -o studytool-v2.exe ./cmd/server/
+./studytool-v2.exe
+```
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| Frontend | Streamlit | Chat interface and document management |
-| RAG Pipeline | LangChain | Document loading, splitting, retrieval chain |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Local vector embedding generation |
-| Vector Store | FAISS | Persistent similarity search database |
-| Document Parsing | PyPDF, python-docx, Unstructured | Multi-format file processing |
+The API is available at `http://localhost:8081/api/v2/`.
+
+## API
+
+### Notebooks
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v2/notebooks` | Create notebook |
+| `GET` | `/api/v2/notebooks` | List notebooks |
+| `GET` | `/api/v2/notebooks/{id}` | Get notebook |
+| `PUT` | `/api/v2/notebooks/{id}` | Update notebook |
+| `DELETE` | `/api/v2/notebooks/{id}` | Delete notebook |
+
+### Sources
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v2/notebooks/{id}/sources` | Upload file (multipart) |
+| `GET` | `/api/v2/notebooks/{id}/sources` | List sources |
+| `DELETE` | `/api/v2/notebooks/{id}/sources/{sid}` | Delete source |
+
+### Chat
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v2/notebooks/{id}/chat` | Send message (full response) |
+| `POST` | `/api/v2/notebooks/{id}/chat/stream` | Send message (SSE streaming) |
+| `GET` | `/api/v2/notebooks/{id}/chat/history` | Get chat history |
+| `DELETE` | `/api/v2/notebooks/{id}/chat/history` | Clear chat history |
+
+### Generate
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v2/notebooks/{id}/generate` | Generate content |
+| `GET` | `/api/v2/notebooks/{id}/generate` | List generated content |
+| `DELETE` | `/api/v2/notebooks/{id}/generate/{gid}` | Delete generated content |
+
+**Generation types:** `summary`, `study_guide`, `flashcards`, `faq`, `timeline`, `audio_overview`, or provide `custom_prompt`.
+
+## Architecture (v2)
+
+```
+Client (any frontend)
+    |  HTTP/SSE
+    v
+Chi Router (:8081)  ──  Middleware (CORS, Logger, Recovery)
+    |
+    ├── Notebook Handler  ── SQLite (notebooks, sources, chat, generated)
+    ├── Source Handler    ── Parser ── Chunker ── Ollama Embed ── Vector Store
+    ├── Chat Handler      ── Vector Search ── Ollama Chat (streaming)
+    └── Generate Handler  ── Vector Context ── Ollama Generate
+                                |
+                                v
+                        Ollama (:11434)
+                        DeepSeek-R1 + all-minilm
+```
 
 ## Project Structure
 
 ```
 studyToolBackend/
-├── app.py                      # Streamlit application (main entry point)
-├── utils/
-│   ├── __init__.py
-│   ├── config.py               # Environment configuration
-│   ├── document_processor.py   # File loading and chunking pipeline
-│   ├── vector_store.py         # FAISS management and search
-│   └── rag_engine.py           # Query processing and answer synthesis
-├── .streamlit/
-│   └── config.toml             # UI theme configuration
-├── requirements.txt
-├── .env.example
-└── .gitignore
+├── v1/                              # Version 1 (reference)
+│   ├── frontend/                    #   Streamlit UI
+│   │   ├── app.py
+│   │   ├── requirements.txt
+│   │   └── .streamlit/config.toml
+│   └── backend/                     #   Go microservice (stdlib)
+│       ├── main.go
+│       ├── go.mod
+│       └── internal/
+│           ├── api/handler.go
+│           ├── ollama/client.go
+│           ├── store/vector.go
+│           ├── parser/parser.go
+│           └── chunker/chunker.go
+│
+├── v2/                              # Version 2 (active)
+│   ├── cmd/server/main.go          #   Entry point (Chi router)
+│   ├── go.mod
+│   └── internal/
+│       ├── config/config.go         #   Env-based configuration
+│       ├── models/models.go         #   Domain models
+│       ├── database/sqlite.go       #   SQLite persistence (pure-Go)
+│       ├── vectorstore/store.go     #   Per-notebook vector store
+│       ├── llm/ollama.go            #   Ollama client + SSE streaming
+│       ├── handler/
+│       │   ├── notebook.go          #   Notebook CRUD
+│       │   ├── source.go            #   Source upload/manage
+│       │   ├── chat.go              #   RAG chat + streaming + history
+│       │   ├── generate.go          #   Content generation
+│       │   └── helpers.go           #   JSON utilities
+│       ├── parser/parser.go         #   Document parsing
+│       └── chunker/chunker.go       #   Text chunking
+│
+├── .gitignore
+├── LICENSE
+└── README.md
 ```
 
 ## Configuration
 
-All settings are configurable via environment variables (see `.env.example`):
+Environment variables for v2:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | HuggingFace model for embeddings |
-| `FAISS_INDEX_DIR` | `./faiss_index` | FAISS index storage location |
-| `CHUNK_SIZE` | `1000` | Characters per document chunk |
-| `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks |
-| `MAX_UPLOAD_SIZE_MB` | `50` | Maximum file upload size |
-
-## Extending
-
-**Adding LLM-powered answers:** The current implementation uses extractive retrieval. To add generative answers, integrate an LLM in `rag_engine.py`:
-- **Local**: Ollama (Llama 3, Mistral) via `langchain-ollama`
-- **Cloud**: OpenAI, Anthropic, or Google via their respective LangChain integrations
-
-**Adding more file types:** Extend `LOADER_MAP` in `document_processor.py` with any LangChain-compatible document loader.
+| `PORT` | `8081` | Server port |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |
+| `CHAT_MODEL` | `deepseek-r1:1.5b` | Model for chat/generation |
+| `EMBED_MODEL` | `all-minilm` | Model for embeddings |
+| `DATA_DIR` | `./data` | SQLite + vector store directory |
 
 ## License
 

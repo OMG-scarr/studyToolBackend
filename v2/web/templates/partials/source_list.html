@@ -1,0 +1,32 @@
+{{define "source_list"}}
+{{if .Sources}}
+<ul class="source-list">
+    {{range .Sources}}
+    <li class="source-item">
+        <div class="source-info">
+            <span class="source-icon">
+                {{if eq .FileType "pdf"}}&#x1F4D5;
+                {{else if eq .FileType "docx"}}&#x1F4D8;
+                {{else if eq .FileType "md"}}&#x1F4DD;
+                {{else}}&#x1F4C4;{{end}}
+            </span>
+            <div>
+                <div class="source-name">{{.Filename}}</div>
+                <div class="source-meta">{{.ChunkCount}} chunks</div>
+            </div>
+        </div>
+        <button class="btn-icon btn-danger-icon"
+                hx-delete="/notebooks/{{.NotebookID}}/sources/{{.ID}}"
+                hx-target="#source-list"
+                hx-swap="innerHTML"
+                hx-confirm="Remove {{.Filename}}?"
+                title="Remove source">&times;</button>
+    </li>
+    {{end}}
+</ul>
+{{else}}
+<div class="empty-hint">
+    <p>No sources yet. Upload a document to get started.</p>
+</div>
+{{end}}
+{{end}}

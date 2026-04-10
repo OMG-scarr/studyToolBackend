@@ -1,0 +1,29 @@
+{{define "chat_messages"}}
+{{if .Messages}}
+    {{range .Messages}}
+    <div class="chat-msg chat-msg-{{.Role}}">
+        <div class="chat-msg-avatar">
+            {{if eq .Role "user"}}&#x1F464;{{else}}&#x1F916;{{end}}
+        </div>
+        <div class="chat-msg-body">
+            <div class="chat-msg-content">{{.Content}}</div>
+            {{if .Sources}}
+            <div class="chat-sources">
+                {{range .Sources}}
+                <span class="source-tag">{{.Filename}} ({{pct .Relevance}}%)</span>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+    <script>
+        document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+    </script>
+{{else}}
+    <div class="chat-empty">
+        <div class="empty-icon">&#x1F4AC;</div>
+        <p>Ask a question about your study materials</p>
+    </div>
+{{end}}
+{{end}}

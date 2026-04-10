@@ -1,0 +1,61 @@
+{{define "title"}}StudyTool - Notebooks{{end}}
+{{define "content"}}
+<div class="home">
+    <div class="home-header">
+        <h1>Your Notebooks</h1>
+        <button class="btn btn-primary" onclick="document.getElementById('new-notebook-dialog').showModal()">
+            + New Notebook
+        </button>
+    </div>
+
+    <dialog id="new-notebook-dialog" class="dialog">
+        <form hx-post="/notebooks" hx-target="body" method="dialog">
+            <h2>Create Notebook</h2>
+            <div class="form-group">
+                <label for="emoji">Icon</label>
+                <select name="emoji" id="emoji" class="input">
+                    <option value="&#x1F4D3;">&#x1F4D3; Notebook</option>
+                    <option value="&#x1F4DA;">&#x1F4DA; Books</option>
+                    <option value="&#x1F9EA;">&#x1F9EA; Science</option>
+                    <option value="&#x1F4BB;">&#x1F4BB; Computer</option>
+                    <option value="&#x1F3A8;">&#x1F3A8; Art</option>
+                    <option value="&#x1F30D;">&#x1F30D; Geography</option>
+                    <option value="&#x2696;&#xFE0F;">&#x2696;&#xFE0F; Law</option>
+                    <option value="&#x1F4C8;">&#x1F4C8; Business</option>
+                    <option value="&#x1F9EC;">&#x1F9EC; Biology</option>
+                    <option value="&#x2795;">&#x2795; Math</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="title">Title</label>
+                <input type="text" name="title" id="title" class="input" placeholder="e.g. Biology 101" required autofocus>
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create</button>
+            </div>
+        </form>
+    </dialog>
+
+    {{if .Notebooks}}
+    <div class="notebook-grid">
+        {{range .Notebooks}}
+        <a href="/notebooks/{{.ID}}" class="notebook-card">
+            <div class="notebook-emoji">{{.Emoji}}</div>
+            <div class="notebook-info">
+                <h3>{{.Title}}</h3>
+                <p class="notebook-meta">{{.SourceCount}} sources &middot; {{.ChunkCount}} chunks</p>
+            </div>
+        </a>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="empty-state">
+        <div class="empty-icon">&#x1F4DA;</div>
+        <h2>No notebooks yet</h2>
+        <p>Create your first notebook to start uploading study materials and chatting with them.</p>
+    </div>
+    {{end}}
+</div>
+{{end}}
+{{template "layout" .}}

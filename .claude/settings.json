@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(c:/Users/mutho/Documents/Github/studyToolBackend/venv/Scripts/python.exe -m streamlit run c:/Users/mutho/Documents/Github/studyToolBackend/app.py)"
+      "Bash(c:/Users/mutho/Documents/Github/studyToolBackend/venv/Scripts/python.exe -m streamlit run c:/Users/mutho/Documents/Github/studyToolBackend/app.py)",
+      "Bash(go mod:*)",
+      "Bash(go doc:*)",
+      "Bash(go build:*)",
+      "Bash(ls c:/Users/mutho/Documents/Github/studyToolBackend/.env*)",
+      "Bash(curl -s -X POST http://localhost:8080/api/upload -F \"file=@/tmp/test_doc.txt\")",
+      "Bash(curl -s -X POST http://localhost:11434/api/pull -d '{\"name\": \"all-minilm\", \"stream\": false}')"
     ]
   }
 }

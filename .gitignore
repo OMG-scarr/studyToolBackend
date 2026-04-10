@@ -11,7 +11,13 @@ venv/
 # Environment
 .env
 
-# FAISS persistence
+# Go binaries
+*.exe
+*.exe~
+
+# Data / persistence
+v1/backend/data/
+v2/data/
 faiss_index/
 
 # IDE

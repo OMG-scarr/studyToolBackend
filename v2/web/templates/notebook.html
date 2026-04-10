@@ -1,0 +1,106 @@
+{{define "title"}}{{.Notebook.Emoji}} {{.Notebook.Title}} - StudyTool{{end}}
+{{define "content"}}
+<div class="workspace">
+    <!-- Left Panel: Sources -->
+    <aside class="panel panel-left">
+        <div class="panel-header">
+            <h2>Sources</h2>
+        </div>
+
+        <form class="upload-form"
+              hx-post="/notebooks/{{.Notebook.ID}}/sources"
+              hx-target="#source-list"
+              hx-swap="innerHTML"
+              hx-encoding="multipart/form-data"
+              hx-indicator="#upload-spinner">
+            <label class="upload-area" for="file-input">
+                <span class="upload-icon">&#x1F4C4;</span>
+                <span>Drop file or click to upload</span>
+                <span class="upload-hint">PDF, DOCX, TXT, MD, CSV</span>
+                <input type="file" name="file" id="file-input"
+                       accept=".pdf,.docx,.txt,.md,.csv"
+                       onchange="this.form.requestSubmit()" hidden>
+            </label>
+            <div id="upload-spinner" class="spinner htmx-indicator">Processing document...</div>
+        </form>
+
+        <div id="source-list">
+            {{template "source_list" .}}
+        </div>
+    </aside>
+
+    <!-- Center: Chat -->
+    <section class="panel panel-center">
+        <div class="panel-header chat-header">
+            <div>
+                <h2>{{.Notebook.Emoji}} {{.Notebook.Title}}</h2>
+                {{if .Notebook.Description}}<p class="subtitle">{{.Notebook.Description}}</p>{{end}}
+            </div>
+            <div class="chat-actions">
+                <button class="btn btn-ghost btn-sm"
+                        hx-delete="/notebooks/{{.Notebook.ID}}/chat/history"
+                        hx-target="#chat-messages"
+                        hx-swap="innerHTML"
+                        hx-confirm="Clear all chat history?">
+                    Clear Chat
+                </button>
+                <button class="btn btn-danger btn-sm"
+                        hx-delete="/notebooks/{{.Notebook.ID}}"
+                        hx-confirm="Delete this notebook and all its contents?">
+                    Delete Notebook
+                </button>
+            </div>
+        </div>
+
+        <div id="chat-messages" class="chat-messages">
+            {{template "chat_messages" .}}
+        </div>
+
+        <form class="chat-input-form"
+              hx-post="/notebooks/{{.Notebook.ID}}/chat"
+              hx-target="#chat-messages"
+              hx-swap="innerHTML"
+              hx-indicator="#chat-spinner"
+              hx-on::after-request="this.reset(); document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight">
+            <input type="text" name="message" class="chat-input"
+                   placeholder="Ask about your study materials..."
+                   autocomplete="off" required>
+            <button type="submit" class="btn btn-primary">Send</button>
+            <div id="chat-spinner" class="spinner htmx-indicator">Thinking...</div>
+        </form>
+    </section>
+
+    <!-- Right Panel: Generated Content -->
+    <aside class="panel panel-right">
+        <div class="panel-header">
+            <h2>Studio</h2>
+        </div>
+
+        <div class="generate-buttons">
+            {{$nbID := .Notebook.ID}}
+            {{range $type := list "summary" "study_guide" "flashcards" "faq" "timeline" "audio_overview"}}
+            <button class="gen-btn"
+                    hx-post="/notebooks/{{$nbID}}/generate"
+                    hx-vals='{"type": "{{$type}}"}'
+                    hx-target="#generated-list"
+                    hx-swap="innerHTML"
+                    hx-indicator="#gen-spinner">
+                {{if eq $type "summary"}}&#x1F4DD; Summary
+                {{else if eq $type "study_guide"}}&#x1F4D6; Study Guide
+                {{else if eq $type "flashcards"}}&#x1F0CF; Flashcards
+                {{else if eq $type "faq"}}&#x2753; FAQ
+                {{else if eq $type "timeline"}}&#x23F3; Timeline
+                {{else if eq $type "audio_overview"}}&#x1F399; Audio Overview
+                {{end}}
+            </button>
+            {{end}}
+        </div>
+        <div id="gen-spinner" class="spinner htmx-indicator">Generating content...</div>
+
+        <div id="generated-list">
+            {{template "generated_list" .}}
+        </div>
+    </aside>
+</div>
+{{end}}
+{{template "layout" .}}

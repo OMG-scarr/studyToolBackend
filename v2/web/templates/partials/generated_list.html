@@ -1,0 +1,33 @@
+{{define "generated_list"}}
+{{if .Generated}}
+<div class="generated-items">
+    {{range .Generated}}
+    <details class="generated-item">
+        <summary class="generated-header">
+            <span>
+                {{if eq .Type "summary"}}&#x1F4DD;
+                {{else if eq .Type "study_guide"}}&#x1F4D6;
+                {{else if eq .Type "flashcards"}}&#x1F0CF;
+                {{else if eq .Type "faq"}}&#x2753;
+                {{else if eq .Type "timeline"}}&#x23F3;
+                {{else if eq .Type "audio_overview"}}&#x1F399;
+                {{else}}&#x2728;{{end}}
+                {{.Title}}
+            </span>
+            <button class="btn-icon btn-danger-icon"
+                    hx-delete="/notebooks/{{.NotebookID}}/generate/{{.ID}}"
+                    hx-target="#generated-list"
+                    hx-swap="innerHTML"
+                    onclick="event.stopPropagation()"
+                    title="Delete">&times;</button>
+        </summary>
+        <div class="generated-content">{{.Content}}</div>
+    </details>
+    {{end}}
+</div>
+{{else}}
+<div class="empty-hint">
+    <p>Generate study materials using the buttons above.</p>
+</div>
+{{end}}
+{{end}}

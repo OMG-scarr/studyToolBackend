@@ -1,40 +1,122 @@
 """
 StudyTool - AI-Powered Study Assistant
-Main Streamlit application.
-
-A RAG-based learning platform that lets students upload study materials
-(PDFs, DOCX, TXT, Markdown, CSV) and query them using natural language.
-Powered by LangChain, FAISS, and local sentence-transformer embeddings.
+Streamlit frontend that calls the Go microservice backend.
 """
 
-import os
 import time
-import tempfile
 import logging
+import subprocess
+import sys
+import os
 from pathlib import Path
 
+import requests
 import streamlit as st
-from utils import Config, DocumentProcessor, VectorStoreManager, RAGEngine
 
-# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+GO_SERVICE_URL = "http://localhost:8080"
 
-# --- Session State Initialization ---
 
-def init_session_state():
-    """Initialize all session state variables."""
-    if "processor" not in st.session_state:
-        st.session_state.processor = DocumentProcessor()
-    if "vector_store" not in st.session_state:
-        st.session_state.vector_store = VectorStoreManager()
-    if "rag_engine" not in st.session_state:
-        st.session_state.rag_engine = RAGEngine(st.session_state.vector_store)
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    if "processing" not in st.session_state:
-        st.session_state.processing = False
+# --- Auto-start Go Service ---
+
+def ensure_go_service():
+    """Start the Go backend if it's not already running."""
+    try:
+        requests.get(f"{GO_SERVICE_URL}/api/stats", timeout=2)
+        return  # Already running
+    except Exception:
+        pass
+
+    # Find the Go binary (sibling backend directory)
+    base = Path(__file__).parent.parent / "backend"
+    if sys.platform == "win32":
+        binary = base / "studytool-service.exe"
+    else:
+        binary = base / "studytool-service"
+
+    if not binary.exists():
+        st.error(
+            f"Go service binary not found at `{binary}`.\n\n"
+            f"Build it first: `cd go-service && go build -o {binary.name} .`"
+        )
+        st.stop()
+
+    logger.info("Starting Go service...")
+    subprocess.Popen(
+        [str(binary)],
+        cwd=str(base),
+    )
+
+    # Wait for it to be ready
+    for _ in range(20):
+        try:
+            time.sleep(0.5)
+            requests.get(f"{GO_SERVICE_URL}/api/stats", timeout=2)
+            logger.info("Go service is ready")
+            return
+        except Exception:
+            continue
+
+    st.error("Go service failed to start. Check that Ollama is running (`ollama serve`).")
+    st.stop()
+
+
+ensure_go_service()
+
+
+# --- Helper Functions ---
+
+def get_stats():
+    """Fetch collection stats from Go service."""
+    try:
+        resp = requests.get(f"{GO_SERVICE_URL}/api/stats", timeout=5)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {"total_chunks": 0, "unique_sources": 0, "source_names": []}
+
+
+def upload_file(uploaded_file):
+    """Upload a file to the Go service."""
+    files = {"file": (uploaded_file.name, uploaded_file.getbuffer(), uploaded_file.type)}
+    resp = requests.post(f"{GO_SERVICE_URL}/api/upload", files=files, timeout=300)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def ask_question(question):
+    """Send a question to the Go service."""
+    resp = requests.post(
+        f"{GO_SERVICE_URL}/api/chat",
+        json={"question": question},
+        timeout=300,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def delete_source(name):
+    """Delete a source from the Go service."""
+    resp = requests.delete(f"{GO_SERVICE_URL}/api/source/{name}", timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def clear_all():
+    """Clear all documents from the Go service."""
+    resp = requests.delete(f"{GO_SERVICE_URL}/api/clear", timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+# --- Session State ---
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "processing" not in st.session_state:
+    st.session_state.processing = False
 
 
 # --- Page Configuration ---
@@ -45,8 +127,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-init_session_state()
 
 
 # --- Custom Styling ---
@@ -105,8 +185,7 @@ st.markdown("""
 with st.sidebar:
     st.markdown("### Knowledge Base")
 
-    # Collection stats
-    stats = st.session_state.vector_store.get_collection_stats()
+    stats = get_stats()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -146,50 +225,28 @@ with st.sidebar:
         st.session_state.processing = True
         progress_bar = st.progress(0)
         status_text = st.empty()
-
-        all_chunks = []
         total = len(uploaded_files)
 
         for i, uploaded_file in enumerate(uploaded_files):
             status_text.text(f"Processing: {uploaded_file.name}...")
-            progress_bar.progress((i) / total)
-
-            # Save to temp file
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=Path(uploaded_file.name).suffix,
-            ) as tmp:
-                tmp.write(uploaded_file.getbuffer())
-                tmp_path = tmp.name
+            progress_bar.progress(i / total)
 
             try:
-                chunks = st.session_state.processor.process_file(
-                    tmp_path, source_name=uploaded_file.name
-                )
-                all_chunks.extend(chunks)
+                result = upload_file(uploaded_file)
+                st.success(f"{uploaded_file.name}: {result.get('chunks', 0)} chunks added")
             except Exception as e:
                 st.error(f"Failed to process {uploaded_file.name}: {e}")
-            finally:
-                os.unlink(tmp_path)
 
-        if all_chunks:
-            status_text.text("Embedding documents...")
-            progress_bar.progress(0.9)
-
-            added = st.session_state.vector_store.add_documents(all_chunks)
-
-            progress_bar.progress(1.0)
-            status_text.text("")
-            st.success(f"Added {added} chunks from {total} document(s)")
-            time.sleep(1)
-            st.rerun()
-
+        progress_bar.progress(1.0)
+        status_text.text("")
         st.session_state.processing = False
+        time.sleep(1)
+        st.rerun()
 
     st.markdown("---")
 
     # Document list
-    if stats["source_names"]:
+    if stats.get("source_names"):
         st.markdown("#### Loaded Documents")
         for source in stats["source_names"]:
             col_name, col_del = st.columns([4, 1])
@@ -197,8 +254,11 @@ with st.sidebar:
                 st.markdown(f'<span class="source-tag">{source}</span>', unsafe_allow_html=True)
             with col_del:
                 if st.button("x", key=f"del_{source}", help=f"Remove {source}"):
-                    removed = st.session_state.vector_store.delete_source(source)
-                    st.toast(f"Removed {removed} chunks from {source}")
+                    try:
+                        result = delete_source(source)
+                        st.toast(f"Removed chunks from {source}")
+                    except Exception as e:
+                        st.error(f"Failed to remove {source}: {e}")
                     st.rerun()
 
     st.markdown("---")
@@ -206,7 +266,7 @@ with st.sidebar:
     # Clear all
     if stats["total_chunks"] > 0:
         if st.button("Clear All Documents", use_container_width=True):
-            st.session_state.vector_store.clear_collection()
+            clear_all()
             st.session_state.chat_history = []
             st.toast("Knowledge base cleared")
             st.rerun()
@@ -218,7 +278,7 @@ st.markdown('<div class="main-header">StudyTool</div>', unsafe_allow_html=True)
 st.markdown(
     '<div class="sub-header">'
     "Upload your study materials and ask questions. "
-    "Powered by semantic search across your documents."
+    "Powered by DeepSeek-R1 + Go microservice."
     "</div>",
     unsafe_allow_html=True,
 )
@@ -249,30 +309,33 @@ query = st.chat_input(
 )
 
 if query:
-    # Display user message
     st.session_state.chat_history.append({"role": "user", "content": query})
     with st.chat_message("user"):
         st.markdown(query)
 
-    # Generate response
     with st.chat_message("assistant"):
-        with st.spinner("Searching your documents..."):
-            response = st.session_state.rag_engine.query(query)
+        with st.spinner("Thinking..."):
+            try:
+                response = ask_question(query)
+                answer = response.get("answer", "No response received.")
+                sources = response.get("sources", [])
+            except Exception as e:
+                answer = f"Error connecting to Go service: {e}\n\nMake sure the Go service is running on port 8080."
+                sources = []
 
-        st.markdown(response.answer)
+        st.markdown(answer)
 
-        if response.sources:
+        if sources:
             source_list = " | ".join(
-                [f"**{s['name']}** ({s['relevance']:.0%})" for s in response.sources]
+                [f"**{s['name']}** ({s['relevance']:.0%})" for s in sources]
             )
             st.markdown(
                 f'<div class="chat-sources">Sources: {source_list}</div>',
                 unsafe_allow_html=True,
             )
 
-    # Save to history
     st.session_state.chat_history.append({
         "role": "assistant",
-        "content": response.answer,
-        "sources": response.sources,
+        "content": answer,
+        "sources": sources,
     })
